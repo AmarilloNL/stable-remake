@@ -41,7 +41,7 @@ sealed class Skin
     public float ScoreOverlap, ComboOverlap, AnimationFramerate;
     public Color SongSelectActiveText = Color.Black, SongSelectInactiveText = Color.White;
     public Color MenuGlow = new(128, 128, 160, 255); // main menu visualizer (stable's built-in default)
-    public bool CursorCentre = true, CursorRotate = true;
+    public bool CursorCentre = true, CursorRotate = true, CursorExpand = true;
     public Color InputOverlayText = Color.Black;
     public Color SpinnerBackground = new(100, 100, 100, 255); // stable tints spinner-background with this
     public bool SpinnerNoBlink;
@@ -130,6 +130,7 @@ sealed class Skin
                 case "SpinnerNoBlink": SpinnerNoBlink = v == "1"; break;
                 case "CursorCentre": CursorCentre = v != "0"; break;
                 case "CursorRotate": CursorRotate = v != "0"; break;
+                case "CursorExpand": CursorExpand = v != "0"; break;
                 case "InputOverlayText": InputOverlayText = ParseColour(v) ?? InputOverlayText; break;
                 case "SongSelectInactiveText": SongSelectInactiveText = ParseColour(v) ?? SongSelectInactiveText; break;
                 case "AnimationFramerate": float.TryParse(v, CultureInfo.InvariantCulture, out AnimationFramerate); break;

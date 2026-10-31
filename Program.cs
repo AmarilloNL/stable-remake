@@ -364,6 +364,10 @@ static class Game
             if (scoreLog && judge.Score != lastScore) Console.Error.WriteLine($"score {judge.Time:0} {lastScore = judge.Score}");
         }
         var x = judge.Result;
+        // The header gets our judgement, so stable's ranking screen and leaderboard show real numbers for the file.
+        (info.N300, info.N100, info.N50, info.NMiss, info.MaxCombo, info.Score) = (x.N300, x.N100, x.N50, x.NMiss, x.MaxCombo, judge.Score);
+        (info.NGeki, info.NKatu, info.Perfect) = (judge.Geki, judge.Katu, x.MaxCombo == judge.MapMaxCombo);
+        Replays.SaveOsr(outPath, info, frames);
         Console.WriteLine(string.Format(System.Globalization.CultureInfo.InvariantCulture, "{0} seed {1}: timing sd {2:0}ms wobble {3:0.0}px -> ours {4}/{5}/{6}/{7} {8}x score {9}",
             Path.GetFileName(outPath), seed, timing, wobble, x.N300, x.N100, x.N50, x.NMiss, x.MaxCombo, judge.Score));
         judge.Dispose();

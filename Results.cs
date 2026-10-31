@@ -319,7 +319,7 @@ sealed partial class Player
             string player = p.watching is { Player.Length: > 0 } r ? r.Player : AutoPlay ? "osu!" : Config.Get("Username", Environment.UserName);
             var date = p.watching?.Date ?? DateTime.Now;
             // Measured against stable: its header sits ~3 units in and renders ~3.5% wider than its nominal sizes.
-            Game.Text($"{(map.Source.Length > 0 ? $"{map.Source} ({map.Artist})" : map.Artist)} - {map.Title} [{map.Version}]", 3.3f * u, 1 * u, 22.8f * u, Color.White);
+            Game.Text($"{map.Artist} - {map.Title} [{map.Version}]", 3.3f * u, 1 * u, 22.8f * u, Color.White); // stable: no source here (song select shows "Source (Artist)")
             Game.TextRegular($"Beatmap by {map.Creator}", 3.3f * u, 20.7f * u, 16.5f * u, Color.White); // stable: size 16, regular weight
             Game.TextRegular($"Played by {player} on {date}.", 3.3f * u, 34.7f * u, 16.5f * u, Color.White);
             if (skin.Tex("ranking-title") is { } title) title.Draw(Centre(title, R(20, 0), new(1, 0), sd), sd, Color.White);

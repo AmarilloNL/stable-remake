@@ -65,6 +65,8 @@ sealed partial class Player : Screen
 
     long score;
     internal long Score => score;
+    internal int Geki => nGeki;
+    internal int Katu => nKatu;
     internal double Time => time;
     int combo, maxCombo, n300, n100, n50, nMiss, nGeki, nKatu;
     internal readonly List<Vector2> hpGraph = []; // (time, hp 0..1) for the results screen
@@ -199,8 +201,7 @@ sealed partial class Player : Screen
 
     void UpdateDim(double dtMs)
     {
-        bool rest = time < objs[0].Time - map.Preempt || time > objs[^1].EndTime + map.Hit50 || InBreak(time);
-        float target = rest ? LightestDim : Config.GetInt("DimLevel", 80);
+        float target = Resting(time) ? LightestDim : Config.GetInt("DimLevel", 80);
         bgDim += (target - bgDim) * (1 - (float)Math.Pow(14 / 15.0, dtMs / (1000 / 60.0)));
     }
 
@@ -221,7 +222,7 @@ sealed partial class Player : Screen
     Vector2 PosOf(HitObject o) => o.Pos + map.StackOffset(o);
     Vector2 BallOf(HitObject o, double t) => o.PositionAtTime(t) + map.StackOffset(o);
     bool CanSkip => objs[0].Time - time > 6000;
-    int MapMaxCombo => objs.Sum(o => o.Type == ObjType.Slider ? 1 + o.Checkpoints.Count : 1);
+    internal int MapMaxCombo => objs.Sum(o => o.Type == ObjType.Slider ? 1 + o.Checkpoints.Count : 1);
 
     public void Dispose()
     {
@@ -261,7 +262,20 @@ sealed partial class Player : Screen
     // fades 0.007 a tick, and every object sprite falls (y *= 1.01, above the field y *= 0.6) and spins (a random
     // +-0.02 rad, then 0.01 more each tick). The clock keeps following the slowing song; the menu shows once the
     // frequency is down to 101. stable spins each sprite separately; we turn each object around its head.
-    float failFreq, playfieldAlpha = 1, fallDown = 1, fallUp = 1;
+    float failFreq, failAlpha = 1, fallDown = 1, fallUp = 1;
+    // stable fades the HUD and the playfield in at the start and out once the map is complete (200ms after the last
+    // object ends, or when the music stops), 0.07 a 60Hz frame; with the first object over 6s away it waits until
+    // 1s before the music starts. Cursor stars, the key overlay and the replay controls stay.
+    float hudFade;
+    float playfieldAlpha => failAlpha * hudFade;
+    double lastEnd = double.NaN;
+    bool Complete => time > (double.IsNaN(lastEnd) ? lastEnd = objs.Max(o => o.EndTime) : lastEnd) + 200 || musicEnded && time > 0;
+
+    void UpdateHudFade(double dtMs)
+    {
+        float target = Complete || time < -1000 && objs[0].Time > 6000 ? 0 : 1, step = 0.07f * (float)(dtMs / (1000 / 60.0));
+        hudFade = hudFade < target ? Math.Min(target, hudFade + step) : Math.Max(target, hudFade - step);
+    }
     float[] fallRot = [];
     double failTickMs;
 
@@ -274,7 +288,7 @@ sealed partial class Player : Screen
             failTickMs -= 1000 / 60.0;
             if (failFreq <= 101) { menuShownAt = Game.NowMs; music?.Pause(); return; }
             if (music != null) music.Frequency = failFreq;
-            playfieldAlpha = Math.Max(0, playfieldAlpha - 0.007f);
+            failAlpha = Math.Max(0, failAlpha - 0.007f);
             fallDown *= 1.01f; fallUp *= 0.6f;
             for (int i = 0; i < fallRot.Length; i++)
                 fallRot[i] = fallRot[i] == 0 ? Random.Shared.NextSingle() * 0.04f - 0.02f : fallRot[i] + 0.01f * MathF.Sign(fallRot[i]);
@@ -443,6 +457,10 @@ sealed partial class Player : Screen
         }
     }
 
+    // stable's "break" state: the intro (until the first object's approach starts), every break, and the outro (after
+    // the last object's 50 window). Key counts, cursor stars and the background dim follow it.
+    bool Resting(double t) => t < objs[0].Time - map.Preempt || t > objs[^1].EndTime + map.Hit50 || InBreak(t);
+
     bool InBreak(double t)
     {
         foreach (var (start, end) in map.Breaks)
@@ -595,7 +613,7 @@ sealed partial class Player : Screen
         {
             if (testPauseStep++ == 0) SetPaused(true); else Continue();
         }
-        if (!VirtualClock) { UpdateMapWarning(); UpdateDim(dtMs); }
+        if (!VirtualClock) { UpdateMapWarning(); UpdateDim(dtMs); UpdateHudFade(dtMs); }
         if (playback != null && TestSpeedAt.Count > 0 && Game.NowMs / 1000 >= TestSpeedAt[0]) { TestSpeedAt.RemoveAt(0); CycleSpeed(); }
         if (playback != null && (Input.IsKeyPressed(KeyboardKey.Escape) || UpdateReplayOverlay())) { Leave(back); return; }
         if (auto && playback == null && UpdateReplayOverlay()) { Leave(back); return; } // End Replay
@@ -1278,10 +1296,14 @@ sealed partial class Player : Screen
         // stable's RPM readout: eased 0.9 a 60Hz tick toward the current speed (rad/ms -> turns/min).
         double kr = Math.Pow(0.9, 1 / (1000 / 60.0));
         s.Rpm = s.Rpm * kr + (1 - kr) * Math.Abs(s.Velocity) * 1000 / (2 * Math.PI) * 60;
+        int req = SpinsRequired(o);
+        // stable fades "SPIN!" out over 300ms once a quarter of the required count is spun (all of it for replays
+        // recorded before 2019-05-10); a quarter of 0 fades it right at the start.
+        int spinText = watching is { Date.Year: > 1 } r && r.Date < new DateTime(2019, 5, 10) ? req : Math.Max(0, req / 4);
+        if (double.IsNaN(s.SpinTextFadeAt) && s.SpinsCounted >= spinText) s.SpinTextFadeAt = s.SimTime;
         if ((int)s.Rotation <= s.SpinsCounted) return;
         s.SpinsCounted++;
-        if (s.SpinsCounted == 4) s.SpinTextFadeAt = s.SimTime; // stable fades "SPIN!" out over 300ms once spun this far
-        int req = SpinsRequired(o);
+        if (double.IsNaN(s.SpinTextFadeAt) && s.SpinsCounted >= spinText) s.SpinTextFadeAt = s.SimTime;
         if (s.SpinsCounted == req) s.ClearAt = s.SimTime;
         if (s.SpinsCounted > req + 3 && (s.SpinsCounted - (req + 3)) % 2 == 0)
         {
@@ -1465,17 +1487,20 @@ sealed partial class Player : Screen
         UpdateBreakStars(auto && playback == null ? autoKeys : inputKeys);
         DrawBreakStars();
         SongSelect.CursorPlayScale = Config.GetBool("AutomaticCursorSizing", false) ? 1 - 0.7f * (float)(map.CS - 4) / 5 : 1;
+        SongSelect.CursorKeys = auto && playback == null ? autoKeys : inputKeys;
         if (auto || autopilot || playback != null) SongSelect.DrawCursorAt(ToScreen(cursor));
         else SongSelect.DrawCursor();
         SongSelect.CursorPlayScale = 1;
+        SongSelect.CursorKeys = null;
     }
 
     // stable's star2 effects, in 640x480 units moved by a little physics step every 60Hz tick (+gravity to the speed,
     // speed x 1/60 to the position); each fades out, scales from 1 and turns between two random angles over a random
-    // 300-1000ms. Cursor stars (StarBreakAdditive, added on): every third tick of a break, and every tick of sliders and
-    // spinners under Relax/Autopilot or in kiai with a key held; they leave with 4x the cursor's last-tick movement
-    // (held keys kick break stars sideways), gravity 8, scale to 0..2. Kiai fountain (white): when kiai starts, 50 stars
-    // from each bottom corner 10ms apart in song time, thrown up and inwards, gravity 12.8, scale to 1..2.8.
+    // 300-1000ms (scale and turn eased Out). Cursor stars (StarBreakAdditive, added on): every third tick of a break, and
+    // every tick of sliders and spinners under Relax/Autopilot or in kiai with a key held; they leave with 4x the cursor's
+    // last-tick movement (held keys kick break stars sideways), gravity 8, scale to 0..2, linear fade. Kiai fountain
+    // (white): when kiai starts, 50 pairs from the bottom corners 10ms apart in song time, thrown up and inwards, gravity
+    // 12.8, scale to 1..2.8, fade eased Out too; both stars of a pair share their life, scale and turn.
     sealed class Star
     {
         public Vector2 Pos, Vel;
@@ -1501,14 +1526,18 @@ sealed partial class Player : Screen
         bool kiai = KiaiAt(time);
         if (kiai && !kiaiWas && !paused && !failed)
             for (int i = 0; i < 50; i++)
+            {
+                double life = rnd.Next(300, 1000);
+                float scale = 1 + rnd.NextSingle() * 1.8f, rot0 = rnd.NextSingle() * 4 - 2, rot1 = rnd.NextSingle() * 4 - 2;
                 foreach (bool right in (bool[])[false, true])
                     stars.Add(new Star
                     {
-                        Fountain = true, Born = time + i * 10, Life = rnd.Next(300, 1000), Gravity = 8 * 1.6f,
+                        Fountain = true, Born = time + i * 10, Life = life, Gravity = 8 * 1.6f,
                         Pos = new Vector2(right ? GetScreenWidth() / u - 30 : 30, 490),
                         Vel = new Vector2(rnd.Next(300, 450) * (right ? -1 : 1), rnd.Next(-800, -700)),
-                        Scale = 1 + rnd.NextSingle() * 1.8f, Rot0 = rnd.NextSingle() * 4 - 2, Rot1 = rnd.NextSingle() * 4 - 2,
+                        Scale = scale, Rot0 = rot0, Rot1 = rot1,
                     });
+            }
         kiaiWas = kiai;
         for (; now - starTickAt >= 1000 / 60.0; starTickAt += 1000 / 60.0)
         {
@@ -1521,15 +1550,15 @@ sealed partial class Player : Screen
                 s.Pos += s.Vel * (1 / 60f);
             }
             if (paused || failed) continue;
-            bool spray = !InBreak(time) && (relax || autopilot || keys != 0 && kiai) && SliderOrSpinnerActive();
-            if (!spray && (!InBreak(time) || starTicks++ <= 1)) continue;
+            bool rest = Resting(time), spray = !rest && (relax || autopilot || keys != 0 && kiai) && SliderOrSpinnerActive();
+            if (!spray && (!rest || starTicks++ <= 1)) continue;
             if (!spray) starTicks = 0;
             var vel = moved * 4;
             bool left = !spray && (keys & 5) != 0, rightKey = !spray && (keys & 10) != 0;
             if (left && rightKey) vel += new Vector2(rnd.Next(-460, 460), rnd.Next(-160, 160));
             else if (left) vel += new Vector2(rnd.Next(-460, 0), rnd.Next(-40, 40));
             else if (rightKey) vel += new Vector2(rnd.Next(0, 460), rnd.Next(-40, 40));
-            stars.Add(new Star { Pos = at, Vel = vel, Born = now, Life = rnd.Next(300, 1000), Scale = rnd.NextSingle() * 2,
+            stars.Add(new Star { Pos = at, Vel = vel, Born = starTickAt + 1000 / 60.0, Life = rnd.Next(300, 1000), Scale = rnd.NextSingle() * 2,
                 Rot0 = rnd.NextSingle() * 4 - 2, Rot1 = rnd.NextSingle() * 4 - 2 });
         }
         stars.RemoveAll(s => StarAge(s) >= s.Life);
@@ -1657,9 +1686,9 @@ sealed partial class Player : Screen
             {
                 double age = StarAge(s);
                 if (s.Fountain != fountain || age < 0) continue;
-                float f = (float)Math.Clamp(age / s.Life, 0, 1);
+                float f = (float)Math.Clamp(age / s.Life, 0, 1), e = (float)Easing.Apply(1, f);
                 var tint = fountain ? Color.White : skin.StarBreakAdditive;
-                tex.Draw(s.Pos * u, sd * (1 + (s.Scale - 1) * f), ColorAlpha(tint, (1 - f) * playfieldAlpha), (s.Rot0 + (s.Rot1 - s.Rot0) * f) * 180 / MathF.PI);
+                tex.Draw(s.Pos * u, sd * (1 + (s.Scale - 1) * e), ColorAlpha(tint, (1 - (fountain ? e : f)) * (fountain ? playfieldAlpha : failAlpha)), (s.Rot0 + (s.Rot1 - s.Rot0) * e) * 180 / MathF.PI);
             }
             if (!fountain) EndBlendMode();
         }
@@ -2373,6 +2402,7 @@ sealed partial class Player : Screen
             float bq = (float)Math.Clamp((Game.NowMs - hudBreakAt) / 500, 0, 1);
             float ba = hudBreak ? 1 - bq : bq, by = -20 * GetScreenHeight() / 480f * (hudBreak ? bq : 1 - bq);
             float markerBreak = hudBreak ? 1 + 0.6f * bq : 1.6f - 0.6f * bq;
+            ba *= hudFade;
             if (ba <= 0) return;
             skin.Tex("scorebar-bg")?.Draw(new Vector2(skin.Tex("scorebar-bg")!.Value.Width * s / 2, skin.Tex("scorebar-bg")!.Value.Height * s / 2 + by), s, ColorAlpha(Color.White, ba));
             // New-style skins (with scorebar-marker) place the fill differently from old ones.

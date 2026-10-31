@@ -59,6 +59,9 @@ sealed partial class Player
         return meterArrowFrom + (meterArrowTo - meterArrowFrom) * (1 - (1 - p) * (1 - p));
     }
 
+    Color HudWhite => ColorAlpha(Color.White, hudFade);
+    Color HudA(Color c) => ColorAlpha(c, c.A / 255f * hudFade);
+
     void DrawHud(int w, int h)
     {
         float u = h / 480f, sd = h / 768f;
@@ -74,7 +77,7 @@ sealed partial class Player
         DrawMods(w, u, sd);
         // stable's "UNRANKED" banner (play-unranked) when the mods keep the play off the rankings: scale 1, centred at y 45.1 (measured).
         if (mods.HasFlag(Mods.Autoplay) || mods.HasFlag(Mods.Relax) || mods.HasFlag(Mods.Autopilot))
-            skin.Tex("play-unranked")?.Draw(new Vector2(w / 2f, 45.1f * u), sd, Color.White);
+            skin.Tex("play-unranked")?.Draw(new Vector2(w / 2f, 45.1f * u), sd, HudWhite);
         DrawScoreboard(u);
 
         DrawReplayOverlay(w, u, now);
@@ -95,13 +98,14 @@ sealed partial class Player
         shownAcc = Math.Abs(shownAcc - Accuracy) < 0.005 ? Accuracy : Accuracy + (shownAcc - Accuracy) * Math.Pow(0.5, frames);
         float scoreScale = 0.96f * sd, accScale = 0.576f * sd, right = w - 6 * u;
         string sc = scoreText.Of((long)Math.Round(shownScore));
-        if (!skin.DrawFont(skin.ScorePrefix, skin.ScoreOverlap, sc, right, 0, scoreScale, 1, Color.White, constant: true))
-            Game.Text(sc, right - Game.TextWidth(sc, 40 * u / 3), 0, 40 * u / 3, Color.White);
+        if (hudFade <= 0) return;
+        if (!skin.DrawFont(skin.ScorePrefix, skin.ScoreOverlap, sc, right, 0, scoreScale, 1, HudWhite, constant: true))
+            Game.Text(sc, right - Game.TextWidth(sc, 40 * u / 3), 0, 40 * u / 3, HudWhite);
         float glyphH = skin.Glyph(skin.ScorePrefix, '0')?.Height ?? 30;
         float accY = glyphH * scoreScale + (skin.Version > 1 ? 3 * u : 0);
         string acc = accText.Of(Math.Round(shownAcc, 2));
-        if (!skin.DrawFont(skin.ScorePrefix, skin.ScoreOverlap, acc, right, accY, accScale, 1, Color.White, constant: true))
-            Game.Text(acc, right - Game.TextWidth(acc, 20 * u / 3), accY, 20 * u / 3, Color.White);
+        if (!skin.DrawFont(skin.ScorePrefix, skin.ScoreOverlap, acc, right, accY, accScale, 1, HudWhite, constant: true))
+            Game.Text(acc, right - Game.TextWidth(acc, 20 * u / 3), accY, 20 * u / 3, HudWhite);
 
         float accW = skin.FontWidth(skin.ScorePrefix, skin.ScoreOverlap, "00.00%", accScale, constant: true);
         DrawBreakGrade(new Vector2(right - Math.Max(0, accW) - 52 * u, accY + glyphH * accScale / 2), sd);
@@ -120,14 +124,14 @@ sealed partial class Player
                 "BottomRight" => (wu - 118, 460, 118),
                 _ => (wu - 178, accBottom - 2, 170),
             };
-            DrawRectangleRec(new Rectangle(bar.X * u, bar.Y * u, bar.W * u, 3 * u), new Color(255, 255, 255, 20));
-            DrawRectangleRec(new Rectangle(bar.X * u, bar.Y * u, bar.W * (float)Math.Max(0, frac) * u, 3 * u), new Color(255, 255, 128, 128));
+            DrawRectangleRec(new Rectangle(bar.X * u, bar.Y * u, bar.W * u, 3 * u), HudA(new Color(255, 255, 255, 20)));
+            DrawRectangleRec(new Rectangle(bar.X * u, bar.Y * u, bar.W * (float)Math.Max(0, frac) * u, 3 * u), HudA(new Color(255, 255, 128, 128)));
             return;
         }
         var centre = new Vector2(right - Math.Max(0, accW) - 24 * u, accY + glyphH * accScale / 2);
         var fill = frac < 0 ? new Color(199, 255, 47, 153) : new Color(255, 255, 255, 153);
-        if (frac != 0) DrawCircleSector(centre, 10 * u, -90, -90 + 360 * (float)Math.Abs(frac), 48, fill);
-        skin.Tex("circularmetre")?.Draw(centre, sd, Color.White); // osu!gameplay.dll
+        if (frac != 0) DrawCircleSector(centre, 10 * u, -90, -90 + 360 * (float)Math.Abs(frac), 48, HudA(fill));
+        skin.Tex("circularmetre")?.Draw(centre, sd, HudWhite); // osu!gameplay.dll
     }
 
     // stable's grade during breaks (measured at 1080p): ranking-X-small 28 units left of the pie, shown from 350ms
@@ -139,8 +143,8 @@ sealed partial class Player
             double t = time - (start + 350);
             if (t < 0 || time > end - 1000) continue;
             if (skin.Tex($"ranking-{Grade()}-small") is not { } g) return;
-            if (t < 1000) g.Draw(at, sd * (1 + 0.3f * (float)t / 1000), ColorAlpha(Color.White, 0.5f * (1 - (float)t / 1000)));
-            g.Draw(at, sd, Color.White);
+            if (t < 1000) g.Draw(at, sd * (1 + 0.3f * (float)t / 1000), ColorAlpha(Color.White, 0.5f * (1 - (float)t / 1000) * hudFade));
+            g.Draw(at, sd, HudWhite);
             return;
         }
     }
@@ -178,7 +182,7 @@ sealed partial class Player
             double q = Math.Clamp((now - hudBreakAt) / 1000, 0, 1);
             float dx = -80 * (float)(hudBreak ? Easing.Apply(2, q) : 1 - Easing.Apply(1, q));
             float x = (2 + dx - 0.625f * scale * originX) * u, y = (472 - 0.625f * scale * (glyphH + 9)) * u;
-            tint = ColorAlpha(tint, tint.A / 255f * (float)(hudBreak ? 1 - q : q));
+            tint = ColorAlpha(tint, tint.A / 255f * (float)(hudBreak ? 1 - q : q) * hudFade);
             if (!skin.DrawFont(skin.ComboPrefix, skin.ComboOverlap, text, x, y, scale * sd, 0, tint))
                 Game.Text(text, x, y, 24 * u * scale / 1.28f, tint);
         }
@@ -209,6 +213,7 @@ sealed partial class Player
         int kept = 0; // RemoveAll without a per-frame closure
         for (int i = 0; i < meterTicks.Count; i++) if (now - meterTicks[i].At <= 10000) meterTicks[kept++] = meterTicks[i];
         meterTicks.RemoveRange(kept, meterTicks.Count - kept);
+        alpha *= hudFade;
         if (alpha <= 0) return;
         float k = (float)Config.GetDouble("ScoreMeterScale", 1);
         var c = new Vector2(w / 2f, (480 - 6 * k) * u);
@@ -241,7 +246,7 @@ sealed partial class Player
         if (skin.Tex("inputoverlay-background") is { } bg)
             DrawTexturePro(bg.Tex, new Rectangle(0, 0, bg.Tex.Width, bg.Tex.Height),
                 new Rectangle(w, top, bg.Width * 1.05f * sd, bg.Height * sd), Vector2.Zero, 90, Color.White);
-        bool counting = !InBreak(time) && !paused && !failed;
+        bool counting = !Resting(time) && !paused && !failed;
         string[] labels = ["K1", "K2", "M1", "M2"];
         for (int i = 0; i < 4; i++)
         {
@@ -287,7 +292,8 @@ sealed partial class Player
     float boardAlpha;
     string? mapMd5;
     static readonly object PlayerPanel = new();
-    readonly Dictionary<object, (float From, float To, double MovedAt, bool Shown, double ShownAt)> panels = [];
+    // Dim: stable fixes a panel's fade target when it (re)appears, from its place in the list at that moment.
+    readonly Dictionary<object, (float From, float To, double MovedAt, bool Shown, double ShownAt, float Dim)> panels = [];
     int boardRank;
     double explodedAt = double.MinValue;
     readonly List<(ReplayInfo? Info, int Rank)> boardRows = [];
@@ -313,13 +319,15 @@ sealed partial class Player
         double hintAge = Game.NowMs - hintFrom;
         if (hintAge < 6000 && scoreboardOn && !overlayHidden)
             Game.TextBold($"Hit <{Config.Get("keyToggleScoreboard", "Tab")}> to toggle scoreboard!", 2 * u, 186.3f * u, 12.4f * u, ColorAlpha(Color.White, (float)(1 - hintAge / 6000)));
-        // stable: the board fades 0.08 a 60Hz tick, in from 0 at the start, out when hidden or failed.
-        boardAlpha = Math.Clamp(boardAlpha + (scoreboardOn && !failed ? 0.08f : -0.08f) * GetFrameTime() * 60, 0, 1);
+        // stable: the board fades 0.08 a 60Hz tick, in from 0 at the start, out when hidden, failed or the map is complete.
+        boardAlpha = Math.Clamp(boardAlpha + (scoreboardOn && !failed && !Complete ? 0.08f : -0.08f) * GetFrameTime() * 60, 0, 1);
         if (boardAlpha <= 0 || overlayHidden) return;
         mapMd5 ??= Replays.Md5Of(map.File);
         var others = back.ScoresFor(mapMd5); // includes the replay being watched, as stable lists it
+        string me = watching is { Player.Length: > 0 } wr ? wr.Player : auto && playback == null ? "osu!" : Config.Get("Username", "You"); // stable's Auto player
+        // stable's order: score, then name; the live entry was made first, so it goes before a stored one with its name.
         int rank = 1;
-        foreach (var r in others) if (r.Score > score) rank++;
+        foreach (var r in others) if (r.Score > score || r.Score == score && string.Compare(r.Player, me, StringComparison.CurrentCulture) < 0) rank++;
         var rows = boardRows; // reused every frame
         rows.Clear();
         if (rank <= 5)
@@ -349,11 +357,13 @@ sealed partial class Player
             object key = rows[slot].Info ?? PlayerPanel;
             ranks[key] = rows[slot];
             float target = 200.5f + slot * 36.1f;
-            if (!panels.TryGetValue(key, out var p)) panels[key] = (target, target, now, true, first ? double.MinValue : now);
+            // stable fades other players' panels to 0.8 - (place - 1) / (stored scores) x 0.3; the live player's to 1.
+            float dim = rows[slot].Info != null ? 0.8f - (rows[slot].Rank - 1) / (float)Math.Max(1, others.Count) * 0.3f : 1;
+            if (!panels.TryGetValue(key, out var p)) panels[key] = (target, target, now, true, first ? double.MinValue : now, dim);
             else
             {
-                if (p.To != target) p = (PanelY(p, now), target, now, p.Shown, p.ShownAt);
-                if (!p.Shown) p = p with { Shown = true, ShownAt = now };
+                if (p.To != target) p = (PanelY(p, now), target, now, p.Shown, p.ShownAt, p.Dim);
+                if (!p.Shown) p = p with { Shown = true, ShownAt = now, Dim = dim };
                 panels[key] = p;
             }
         }
@@ -367,7 +377,6 @@ sealed partial class Player
                 else if (now - p.ShownAt > 600) panels.Remove(key);
             }
 
-        string me = watching is { Player.Length: > 0 } wr ? wr.Player : auto && playback == null ? "osu!" : Config.Get("Username", "You"); // stable's Auto player
         float sd = GetScreenHeight() / 768f;
         foreach (var (key, p) in panels)
         {
@@ -376,8 +385,7 @@ sealed partial class Player
             var info = key as ReplayInfo;
             int r = ranks.TryGetValue(key, out var row) ? row.Rank : 0;
             float y = PanelY(p, now) * u, anchor = y + 4.65f * u; // stable positions the panel's parts from here
-            // stable fades other players' panels to 0.8 - (rank - 1) / count x 0.3; the live player's stays at 1.
-            float dim = info != null && r > 0 ? 0.8f - (r - 1) / (float)Math.Max(1, ranks.Count) * 0.3f : 1;
+            float dim = p.Dim;
             Color A(Color c) => ColorAlpha(c, c.A / 255f * a * boardAlpha * dim);
             // menu-button-background at 0.62 scale with its origin at texel (470, 20).
             if (skin.Tex("menu-button-background") is { } bg)
@@ -385,7 +393,7 @@ sealed partial class Player
                 float k = 0.62f * sd;
                 DrawTexturePro(bg.Tex, new Rectangle(0, 0, bg.Tex.Width, bg.Tex.Height),
                     new Rectangle(-470 * k, anchor - 20 * k, bg.Width * k, bg.Height * k), Vector2.Zero, 0,
-                    A(info != null ? new Color(31, 115, 153, 150) : new Color(250, 250, 250, auto || playback != null ? 40 : 100))); // stable: stored scores blue, the live player light (Auto and replays: measured 40)
+                    A(info != null ? new Color(97, 190, 255, 88) : new Color(250, 250, 250, 39))); // stable: local scores (no online rank) light blue (alpha 150), the live player light (100); its fade target and its draw both take the colour's alpha, so it counts twice (probe: 150 x 0.471 drawn for 0.8)
             }
             if (r > 0) // every panel shows its rank (stable hides it only on its online personal-best extra panel)
                 EntryText(r.ToString(), 82 * u, anchor - 2 * u, 2.2f, false, 3, 1, A(new Color(255, 255, 255, 47))); // measured; a nominal 80 comes out brighter
@@ -415,7 +423,7 @@ sealed partial class Player
         EndBlendMode();
     }
 
-    static float PanelY((float From, float To, double MovedAt, bool Shown, double ShownAt) p, double now) =>
+    static float PanelY((float From, float To, double MovedAt, bool Shown, double ShownAt, float Dim) p, double now) =>
         p.From + (p.To - p.From) * (float)Easing.Apply(1, (now - p.MovedAt) / 600);
 
     // stable's scoreentry sprite font: with fixedWidth, digits and 'x' sit centred in "0"-wide cells while
@@ -452,7 +460,7 @@ sealed partial class Player
         float x = w - 30.2f * u;
         foreach (var sp in modIcons)
         {
-            sp.Draw(new Vector2(x, 94 * u), sd, Color.White);
+            sp.Draw(new Vector2(x, 94 * u), sd, HudWhite);
             x -= 49.5f * u;
         }
     }

@@ -77,7 +77,10 @@ sealed class SongSelect : Screen
     {
         if (!scores.TryGetValue(info.BeatmapMd5, out var list)) scores[info.BeatmapMd5] = list = [];
         list.Add(info);
-        list.Sort((a, b) => b.Score.CompareTo(a.Score));
+        // score, then name (stable's scoreboard order); equal ones keep their order
+        var sorted = list.OrderByDescending(s => s.Score).ThenBy(s => s.Player, StringComparer.CurrentCulture).ToList();
+        list.Clear();
+        list.AddRange(sorted);
     }
 
     void Watch(ReplayInfo info)
@@ -362,23 +365,26 @@ sealed class SongSelect : Screen
     });
 
     // Where the music is in its beat: index within the current red line, phase 0 (on the beat) .. 1.
-    internal (double RedTime, long Index, double Phase, double Length, int Meter, bool Kiai)? Beat()
+    // PointTime: the timing point in effect (red or green).
+    internal (double RedTime, long Index, double Phase, double Length, int Meter, bool Kiai, double PointTime)? Beat()
     {
         double ms = MusicMs;
         if (double.IsNaN(ms) || timing.Count == 0) return null;
         TimingPoint? red = null;
         bool kiai = false;
+        double point = double.NaN;
         foreach (var t in timing)
         {
             if (t.Time > ms) break;
             if (t.Uninherited) red = t;
             kiai = t.Kiai;
+            point = t.Time;
         }
         red ??= timing.FirstOrDefault(t => t.Uninherited);
         if (red == null) return null;
         double beats = (ms - red.Time) / red.BeatLength;
         long index = (long)Math.Floor(beats);
-        return (red.Time, index, beats - index, red.BeatLength, red.Meter, kiai);
+        return (red.Time, index, beats - index, red.BeatLength, red.Meter, kiai, point);
     }
 
     internal double BeatPhase() => Beat()?.Phase ?? double.NaN;
@@ -1484,6 +1490,25 @@ sealed class SongSelect : Screen
         EndBlendMode();
     }
 
+    // stable's cursor expand (skin CursorExpand, on by default): each newly pressed button grows the cursor 1 -> 1.3
+    // over 100ms (Out), letting go of both shrinks it back to 1 over 100ms. In play the player's keys drive it
+    // (live, a replay's or Auto's; bit 1|4 left, 2|8 right).
+    internal static byte? CursorKeys;
+    static int expandMask;
+    static float expandFrom = 1, expandTo = 1;
+    static double expandAt = double.MinValue;
+
+    static float CursorExpandScale(double now)
+    {
+        float Current() => expandFrom + (expandTo - expandFrom) * (float)Easing.Apply(1, (now - expandAt) / 100);
+        int mask = CursorKeys is byte k ? ((k & 5) != 0 ? 1 : 0) | ((k & 10) != 0 ? 2 : 0)
+            : (Input.IsMouseButtonDown(MouseButton.Left) ? 1 : 0) | (Input.IsMouseButtonDown(MouseButton.Right) ? 2 : 0);
+        if ((mask & ~expandMask) != 0) (expandFrom, expandTo, expandAt) = (1, 1.3f, now);
+        else if (mask == 0 && expandMask != 0) (expandFrom, expandTo, expandAt) = (Current(), 1, now);
+        expandMask = mask;
+        return Game.Skin.CursorExpand ? Current() : 1;
+    }
+
     public static void DrawCursorAt(Vector2 pos)
     {
         if (Input.IsMouseButtonPressed(MouseButton.Left) || Input.IsMouseButtonPressed(MouseButton.Right)) Ripple(pos);
@@ -1513,9 +1538,10 @@ sealed class SongSelect : Screen
             {
                 var d = at - from;
                 float len = d.Length();
+                var dir = len > 0 ? d / len : Vector2.Zero; // one unit step direction for the whole walk
                 while (len >= step)
                 {
-                    from += d / len * step;
+                    from += dir * step;
                     len -= step;
                     trail.Add((from, now));
                 }
@@ -1528,8 +1554,10 @@ sealed class SongSelect : Screen
             foreach (var (p, t) in trail) smooth.Draw(p, s, ColorAlpha(Color.White, MathF.Pow(1 - (float)((now - t) / 300), 1.7f)));
             EndBlendMode();
         }
-        if (skin.Tex("cursor") is { } c) c.Draw(Anchor(c), s, Color.White, skin.CursorRotate ? (float)(now % 10000 / 10000 * 360) : 0); // a turn per 10s
-        else DrawCircleV(pos, 12 * s, new Color(255, 200, 80, 255));
-        if (middle && skin.Tex("cursormiddle") is { } m) m.Draw(Anchor(m), s, Color.White); // the default cursor's blue centre
+        float e = s * CursorExpandScale(now);
+        Vector2 Anchored(Sprite sp) => skin.CursorCentre ? pos : pos + new Vector2(sp.Width, sp.Height) * e / 2;
+        if (skin.Tex("cursor") is { } c) c.Draw(Anchored(c), e, Color.White, skin.CursorRotate ? (float)(now % 10000 / 10000 * 360) : 0); // a turn per 10s
+        else DrawCircleV(pos, 12 * e, new Color(255, 200, 80, 255));
+        if (middle && skin.Tex("cursormiddle") is { } m) m.Draw(Anchored(m), e, Color.White); // the default cursor's blue centre
     }
 }

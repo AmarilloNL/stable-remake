@@ -406,10 +406,12 @@ sealed class MainMenu : Screen
         glowLevel = glowLevel * gk + g * (1 - gk);
     }
 
-    // stable's kiai fountain: when the menu song's kiai starts (at most every 500ms), 100 star2s from each bottom corner
+    // stable's kiai fountain: when the menu song's kiai starts (at most every 500ms, and only within 500ms of the timing
+    // point that turned it on, so a song starting mid-kiai throws none), 100 star2s from each bottom corner
     // (100 units in, 490 down), 10ms apart, thrown up (700-800 units/s) and fanned sideways - all one way, the other way
     // or straight up at random - falling with gravity 14.4 a 60Hz tick, bouncing off the screen's sides; each, added on,
-    // fades out while growing to 1..2.8 and turning between two random angles over 300-1300ms.
+    // fades out while growing to 1..2.8 and turning between two random angles over 300-1300ms (all eased Out; both stars
+    // of a pair share their life, scale and turn).
     sealed class MenuStar { public Vector2 Pos, Vel; public double Born, Life; public float Scale, Rot0, Rot1; }
     readonly List<MenuStar> menuStars = [];
     bool menuKiaiWas = true;
@@ -417,22 +419,27 @@ sealed class MainMenu : Screen
 
     void UpdateMenuStars(double now)
     {
-        bool kiai = songs.Beat() is { Kiai: true };
-        if (kiai && !menuKiaiWas && now - menuFountainAt > 500)
+        var beat = songs.Beat();
+        bool kiai = beat is { Kiai: true };
+        if (kiai && !menuKiaiWas && now - menuFountainAt > 500 && Math.Abs(songs.MusicMs - beat!.Value.PointTime) < 500)
         {
             menuFountainAt = now;
             var rnd = Random.Shared;
             int dir = rnd.Next(-1, 2);
             float wu = GetScreenWidth() / (GetScreenHeight() / 480f);
             for (int i = 0; i < 100; i++)
+            {
+                double life = rnd.Next(300, 1300);
+                float scale = 1 + rnd.NextSingle() * 1.8f, rot0 = rnd.NextSingle() * 4 - 2, rot1 = rnd.NextSingle() * 4 - 2;
                 foreach (int side in (int[])[1, -1])
                     menuStars.Add(new MenuStar
                     {
-                        Born = now + i * 10, Life = rnd.Next(300, 1300),
+                        Born = now + i * 10, Life = life,
                         Pos = new Vector2(side > 0 ? 100 : wu - 100, 490),
                         Vel = new Vector2(dir * (i - 50) / 50f * 450 * side + rnd.Next(-50, 50), rnd.Next(-800, -700)),
-                        Scale = 1 + rnd.NextSingle() * 1.8f, Rot0 = rnd.NextSingle() * 4 - 2, Rot1 = rnd.NextSingle() * 4 - 2,
+                        Scale = scale, Rot0 = rot0, Rot1 = rot1,
                     });
+            }
         }
         menuKiaiWas = kiai;
         if (double.IsNaN(menuStarTick)) menuStarTick = now;
@@ -456,7 +463,7 @@ sealed class MainMenu : Screen
         foreach (var s in menuStars)
         {
             if (now < s.Born) continue;
-            float f = (float)Math.Clamp((now - s.Born) / s.Life, 0, 1);
+            float f = (float)Easing.Apply(1, (now - s.Born) / s.Life);
             tex.Draw(s.Pos * u, sd * (1 + (s.Scale - 1) * f), ColorAlpha(Color.White, 1 - f), (s.Rot0 + (s.Rot1 - s.Rot0) * f) * 180 / MathF.PI);
         }
         EndBlendMode();

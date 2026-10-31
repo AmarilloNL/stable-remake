@@ -12,7 +12,8 @@ sealed class ReplayInfo
     public bool FromStable; // a stable .osr (stats are stable's own judgement)
     public Mods Mods;
     public long Score;
-    public int MaxCombo, N300, N100, N50, NMiss;
+    public int MaxCombo, N300, N100, N50, NMiss, NGeki, NKatu;
+    public bool Perfect; // full combo (the .osr flag)
     public double Accuracy;
     public DateTime Date;
 }
@@ -106,11 +107,11 @@ static class Replays
         info.Player = OsrString(r);
         OsrString(r); // replay md5
         info.N300 = r.ReadUInt16(); info.N100 = r.ReadUInt16(); info.N50 = r.ReadUInt16();
-        r.ReadUInt16(); r.ReadUInt16(); // gekis, katus
+        info.NGeki = r.ReadUInt16(); info.NKatu = r.ReadUInt16();
         info.NMiss = r.ReadUInt16();
         info.Score = r.ReadInt32();
         info.MaxCombo = r.ReadUInt16();
-        r.ReadBoolean(); // perfect
+        info.Perfect = r.ReadBoolean();
         info.Mods = (Mods)r.ReadInt32() & ModInfo.Supported;
         OsrString(r); // life bar graph
         info.Date = new DateTime(r.ReadInt64(), DateTimeKind.Utc).ToLocalTime();
@@ -144,10 +145,10 @@ static class Replays
         Str(info.Player);
         Str(Convert.ToHexStringLower(MD5.HashData(System.Text.Encoding.ASCII.GetBytes(text.ToString()))));
         w.Write((ushort)info.N300); w.Write((ushort)info.N100); w.Write((ushort)info.N50);
-        w.Write((ushort)0); w.Write((ushort)0); w.Write((ushort)info.NMiss);
+        w.Write((ushort)info.NGeki); w.Write((ushort)info.NKatu); w.Write((ushort)info.NMiss);
         w.Write((int)info.Score);
         w.Write((ushort)info.MaxCombo);
-        w.Write(info.NMiss == 0 && info.N100 + info.N50 == 0);
+        w.Write(info.Perfect);
         w.Write((int)info.Mods);
         Str("");
         w.Write(info.Date.ToUniversalTime().Ticks);
