@@ -21,11 +21,12 @@ enum Mods
     SpunOut = 4096,
     Autopilot = 8192,
     Perfect = 16384, // always set together with SuddenDeath
+    ScoreV2 = 1 << 29,
 }
 
 static class ModInfo
 {
-    public const Mods Supported = (Mods)0x7FFF; // NF..PF; other stable mods (TD, cinema, keys...) are dropped
+    public const Mods Supported = (Mods)0x7FFF | Mods.ScoreV2; // NF..PF and Score V2; other stable mods (TD, cinema, keys...) are dropped
 
     public static double Rate(this Mods m) => m.HasFlag(Mods.DoubleTime) ? 1.5 : m.HasFlag(Mods.HalfTime) ? 0.75 : 1;
 
@@ -45,6 +46,18 @@ static class ModInfo
         return x;
     }
 
+    // Score V2's: HardRock 1.1x and DoubleTime 1.2x, NoFail 1x, the rest as above
+    public static double ScoreMultiplierV2(this Mods m)
+    {
+        double x = 1;
+        if (m.HasFlag(Mods.HardRock)) x *= 1.1;
+        if (m.HasFlag(Mods.DoubleTime)) x *= 1.2;
+        return x * (m & ~(Mods.HardRock | Mods.DoubleTime | Mods.NoFail)).ScoreMultiplier();
+    }
+
+    // the multiplier the selected mods play with
+    public static double Multiplier(this Mods m) => m.HasFlag(Mods.ScoreV2) ? m.ScoreMultiplierV2() : m.ScoreMultiplier();
+
     public static string Short(this Mods m)
     {
         var parts = new List<string>();
@@ -53,7 +66,7 @@ static class ModInfo
         if (m.HasFlag(Mods.Perfect)) parts.Add("PF"); else Add(Mods.SuddenDeath, "SD");
         if (m.HasFlag(Mods.Nightcore)) parts.Add("NC"); else Add(Mods.DoubleTime, "DT");
         Add(Mods.Hidden, "HD"); Add(Mods.Flashlight, "FL"); Add(Mods.Relax, "RX"); Add(Mods.Autopilot, "AP");
-        Add(Mods.SpunOut, "SO"); Add(Mods.Autoplay, "Auto");
+        Add(Mods.SpunOut, "SO"); Add(Mods.Autoplay, "Auto"); Add(Mods.ScoreV2, "V2");
         return parts.Count == 0 ? "No mods" : string.Join(" ", parts);
     }
 
@@ -76,6 +89,7 @@ static class ModInfo
         KeyboardKey.X => Flip(m, Mods.Autopilot, Mods.Relax | Mods.Autoplay | Mods.SpunOut),
         KeyboardKey.C => Flip(m, Mods.SpunOut, Mods.Autopilot | Mods.Autoplay),
         KeyboardKey.V => Flip(m, Mods.Autoplay, Mods.Relax | Mods.Autopilot),
+        KeyboardKey.B => Flip(m, Mods.ScoreV2, Mods.None),
         _ => m,
     };
 
@@ -90,7 +104,7 @@ static class ModInfo
                 "EZ" => Mods.Easy, "NF" => Mods.NoFail, "HT" => Mods.HalfTime, "HR" => Mods.HardRock,
                 "SD" => Mods.SuddenDeath, "PF" => Mods.SuddenDeath | Mods.Perfect, "DT" => Mods.DoubleTime,
                 "NC" => Mods.DoubleTime | Mods.Nightcore, "HD" => Mods.Hidden, "FL" => Mods.Flashlight,
-                "RX" => Mods.Relax, "AP" => Mods.Autopilot, "SO" => Mods.SpunOut, "AT" => Mods.Autoplay,
+                "RX" => Mods.Relax, "AP" => Mods.Autopilot, "SO" => Mods.SpunOut, "AT" => Mods.Autoplay, "V2" => Mods.ScoreV2,
                 _ => Mods.None,
             };
         return m;

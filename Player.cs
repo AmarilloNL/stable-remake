@@ -12,6 +12,7 @@ sealed class ObjState
     public double JudgeTime;
     public bool HeadDone, HeadHit, HeadMissPending;
     public double HeadTime;
+    public int HeadResult; // the head's timing judgement (Score V2 caps the slider with it)
     public int NextCheckpoint, CheckpointsHit;
     public bool Tracking;
     public double TrackingSince, FollowLostAt = double.NaN;
@@ -164,6 +165,7 @@ sealed partial class Player : Screen
         mouseButtons = !Config.GetBool("MouseDisableButtons", false);
 
         diffMul = map.DifficultyMultiplier;
+        InitScoreV2();
 
         music = Track.Load(Path.Combine(map.Folder, map.AudioFilename), rate, mods.HasFlag(Mods.Nightcore), tempo: playback != null);
         if (music != null)
@@ -1042,11 +1044,12 @@ sealed partial class Player : Screen
         }
         else
         {
-            s.HeadDone = true; s.HeadHit = true; s.HeadTime = time; s.TrackButton = pressButton;
+            s.HeadDone = true; s.HeadHit = true; s.HeadTime = time; s.HeadResult = result; s.TrackButton = pressButton;
             s.CheckpointsHit++;
             score += 30;
             combo++;
             maxCombo = Math.Max(maxCombo, combo);
+            V2Hit(30);
             health.Apply(HpEvent.SliderPoint);
             PlayEdge(o, 0);
         }
@@ -1066,12 +1069,14 @@ sealed partial class Player : Screen
             ScoreHit(result);
             storyboard?.Fire(time, "HitObjectHit");
             if (o.Type != ObjType.Slider) { combo++; maxCombo = Math.Max(maxCombo, combo); } // slider combo comes from its checkpoints
+            V2Hit(result);
             health.Apply(result switch { 300 => HpEvent.Hit300, 100 => HpEvent.Hit100, _ => HpEvent.Hit50 });
             if (result != 300 && mods.HasFlag(Mods.Perfect)) Fail();
         }
         else
         {
             if (o.Type != ObjType.Slider) BreakCombo(); // a fully missed slider already broke combo at its head
+            UpdateV2();
             health.Apply(HpEvent.Miss);
             if (mods.HasFlag(Mods.SuddenDeath)) Fail();
         }
@@ -1164,6 +1169,7 @@ sealed partial class Player : Screen
                 score += tickScore ? 10 : 30;
                 combo++;
                 maxCombo = Math.Max(maxCombo, combo);
+                V2Hit(tickScore ? 10 : 30);
                 health.Apply(tickScore ? HpEvent.SliderTick : HpEvent.SliderPoint);
                 if (cp.Kind == CheckpointKind.Tick)
                 {
@@ -1184,7 +1190,9 @@ sealed partial class Player : Screen
         {
             MissUnclickedHead(i);
             double frac = s.CheckpointsHit / (double)(1 + o.Checkpoints.Count);
-            int result = frac >= 1 ? 300 : frac >= 0.5 ? 100 : frac > 0 ? 50 : 0;
+            int head = s.HeadHit ? s.HeadResult : 0;
+            int result = !ScoreV2 ? (frac >= 1 ? 300 : frac >= 0.5 ? 100 : frac > 0 ? 50 : 0)
+                : frac >= 1 && head == 300 ? 300 : frac >= 0.5 && head >= 100 ? 100 : frac > 0 ? 50 : 0; // Score V2: the head's timing caps it
             Final(i, result, o.EndPos + map.StackOffset(o));
         }
     }
@@ -1275,12 +1283,14 @@ sealed partial class Player : Screen
             s.BonusAt = s.SimTime;
             s.Bonus = 1000 * (s.SpinsCounted - (req + 3)) / 2;
             score += 1100;
+            V2Bonus(500);
             health.Apply(HpEvent.SpinnerBonus);
             skin.Sound("spinnerbonus")?.Play(BeatmapSamples.EffectVolume);
         }
         else if (s.SpinsCounted > 1 && s.SpinsCounted % 2 == 0)
         {
             score += 100;
+            V2Bonus(100);
             health.Apply(HpEvent.SpinnerSpin);
         }
         else if (s.SpinsCounted > 1) health.Apply(HpEvent.SpinnerSpin);

@@ -205,7 +205,7 @@ sealed class SongSelect : Screen
         (Mods.Autoplay, "Autoplay"), (Mods.SpunOut, "SpunOut"), (Mods.Easy, "Easy"), (Mods.NoFail, "NoFail"),
         (Mods.Hidden, "Hidden"), (Mods.Nightcore, "Nightcore"), (Mods.DoubleTime, "DoubleTime"), (Mods.HalfTime, "HalfTime"),
         (Mods.HardRock, "HardRock"), (Mods.Relax, "Relax"), (Mods.Autopilot, "AutoPilot"), (Mods.Perfect, "Perfect"),
-        (Mods.SuddenDeath, "SuddenDeath"), (Mods.Flashlight, "Flashlight"),
+        (Mods.SuddenDeath, "SuddenDeath"), (Mods.Flashlight, "Flashlight"), (Mods.ScoreV2, "ScoreV2"),
     ];
     Mods captionMods = (Mods)(-1);
     string caption = "";
@@ -466,9 +466,9 @@ sealed class SongSelect : Screen
     static readonly KeyboardKey[] ModKeys =
     [
         KeyboardKey.Q, KeyboardKey.W, KeyboardKey.E, KeyboardKey.A, KeyboardKey.S, KeyboardKey.D,
-        KeyboardKey.F, KeyboardKey.G, KeyboardKey.Z, KeyboardKey.X, KeyboardKey.C, KeyboardKey.V,
+        KeyboardKey.F, KeyboardKey.G, KeyboardKey.Z, KeyboardKey.X, KeyboardKey.C, KeyboardKey.V, KeyboardKey.B,
     ];
-    static readonly string[] ModBindings = ["keyEasy", "keyNoFail", "keyHalfTime", "keyHardRock", "keySuddenDeath", "keyDoubleTime", "keyHidden", "keyFlashlight", "keyRelax", "keyAutopilot", "keySpunOut", "keyAuto"];
+    static readonly string[] ModBindings = ["keyEasy", "keyNoFail", "keyHalfTime", "keyHardRock", "keySuddenDeath", "keyDoubleTime", "keyHidden", "keyFlashlight", "keyRelax", "keyAutopilot", "keySpunOut", "keyAuto", "keyScoreV2"];
 
     static bool Pressed(KeyboardKey k) => Input.IsKeyPressed(k) || Input.IsKeyPressedRepeat(k);
 
@@ -1176,7 +1176,7 @@ sealed class SongSelect : Screen
         (Mods.Easy, "easy"), (Mods.NoFail, "nofail"), (Mods.HalfTime, "halftime"), (Mods.HardRock, "hardrock"),
         (Mods.SuddenDeath, "suddendeath"), (Mods.Perfect, "perfect"), (Mods.DoubleTime, "doubletime"), (Mods.Nightcore, "nightcore"),
         (Mods.Hidden, "hidden"), (Mods.Flashlight, "flashlight"), (Mods.Relax, "relax"), (Mods.Autopilot, "relax2"),
-        (Mods.SpunOut, "spunout"), (Mods.Autoplay, "autoplay"),
+        (Mods.SpunOut, "spunout"), (Mods.Autoplay, "autoplay"), (Mods.ScoreV2, "scorev2"),
     ];
 
     bool ClickBottomBar(Vector2 mouse)
@@ -1318,7 +1318,8 @@ sealed class SongSelect : Screen
         ("Difficulty Reduction", new Color(50, 205, 50, 255), [(KeyboardKey.Q, Mods.Easy, Mods.None, "easy", ""), (KeyboardKey.W, Mods.NoFail, Mods.None, "nofail", ""), (KeyboardKey.E, Mods.HalfTime, Mods.None, "halftime", "")]),
         ("Difficulty Increase", new Color(255, 69, 0, 255), [(KeyboardKey.A, Mods.HardRock, Mods.None, "hardrock", ""), (KeyboardKey.S, Mods.SuddenDeath, Mods.Perfect, "suddendeath", "perfect"),
             (KeyboardKey.D, Mods.DoubleTime, Mods.Nightcore, "doubletime", "nightcore"), (KeyboardKey.F, Mods.Hidden, Mods.None, "hidden", ""), (KeyboardKey.G, Mods.Flashlight, Mods.None, "flashlight", "")]),
-        ("Special", Color.White, [(KeyboardKey.Z, Mods.Relax, Mods.None, "relax", ""), (KeyboardKey.X, Mods.Autopilot, Mods.None, "relax2", ""), (KeyboardKey.C, Mods.SpunOut, Mods.None, "spunout", ""), (KeyboardKey.V, Mods.Autoplay, Mods.None, "autoplay", "")]),
+        ("Special", Color.White, [(KeyboardKey.Z, Mods.Relax, Mods.None, "relax", ""), (KeyboardKey.X, Mods.Autopilot, Mods.None, "relax2", ""), (KeyboardKey.C, Mods.SpunOut, Mods.None, "spunout", ""), (KeyboardKey.V, Mods.Autoplay, Mods.None, "autoplay", ""),
+            (KeyboardKey.B, Mods.ScoreV2, Mods.None, "scorev2", "")]),
     ];
     const string ModBlurb = "Mods provide different ways to enjoy gameplay. Some have an effect on the score you can achieve during ranked play. Others are just for fun.";
     double modSelectAt, modButtonFlashAt = double.MinValue;
@@ -1362,10 +1363,10 @@ sealed class SongSelect : Screen
         float fade = (float)Math.Clamp(age / 200, 0, 1);
         Dialog.Backdrop(fade);
         modContentY = Dialog.Title(ModBlurb, fade);
-        string mult = $"Score Multiplier: {mods.ScoreMultiplier():0.00}x";
+        string mult = $"Score Multiplier: {mods.Multiplier():0.00}x";
         float ms = 31.1f * u; // stable's 30, measured
         // stable: the text fades over 400ms to green-yellow above 1x, orange-red below, white at 1x
-        double mul = mods.ScoreMultiplier();
+        double mul = mods.Multiplier();
         var multTarget = mul > 1 ? new Color(173, 255, 47, 255) : mul < 1 ? new Color(255, 69, 0, 255) : Color.White;
         if (multTarget.R != multTo.R || multTarget.G != multTo.G || multTarget.B != multTo.B) { multFrom = multNow; multTo = multTarget; multAt = now; }
         multNow = ColorLerp(multFrom, multTo, (float)Math.Clamp((now - multAt) / 400, 0, 1));
