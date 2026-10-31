@@ -202,10 +202,10 @@ sealed class SongSelect : Screen
     // quarter alpha, under the panels
     static readonly (Mods Flag, string Name)[] CaptionOrder =
     [
-        (Mods.Autoplay, "Autoplay"), (Mods.SpunOut, "SpunOut"), (Mods.Easy, "Easy"), (Mods.NoFail, "NoFail"),
+        (Mods.ScoreV2, "ScoreV2"), (Mods.Autoplay, "Autoplay"), (Mods.SpunOut, "SpunOut"), (Mods.Easy, "Easy"), (Mods.NoFail, "NoFail"),
         (Mods.Hidden, "Hidden"), (Mods.Nightcore, "Nightcore"), (Mods.DoubleTime, "DoubleTime"), (Mods.HalfTime, "HalfTime"),
         (Mods.HardRock, "HardRock"), (Mods.Relax, "Relax"), (Mods.Autopilot, "AutoPilot"), (Mods.Perfect, "Perfect"),
-        (Mods.SuddenDeath, "SuddenDeath"), (Mods.Flashlight, "Flashlight"), (Mods.ScoreV2, "ScoreV2"),
+        (Mods.SuddenDeath, "SuddenDeath"), (Mods.Flashlight, "Flashlight"),
     ];
     Mods captionMods = (Mods)(-1);
     string caption = "";
