@@ -446,6 +446,7 @@ static class Game
     static void VerifyOsr(int max)
     {
         Config.Load();
+        Player.LiveJudging = Environment.GetEnvironmentVariable("VERIFY_STEP") != "1"; // stable recorded these live; VERIFY_STEP=1 judges them as its replay viewer does
         SetTraceLogLevel(TraceLogLevel.None);
         SetConfigFlags(ConfigFlags.HiddenWindow);
         InitWindow(640, 480, "verify");

@@ -209,7 +209,9 @@ sealed partial class Player : Screen
 
     // Headless verification (--verify-osr): time advances only by the dt passed to Update, no audio.
     public static bool VirtualClock;
-    public static bool FrameStepped; // test-only, see the replay stepping loop
+    public static bool FrameStepped; // --fuzz-osr: always step through replay frames like stable's replay viewer
+    public static bool LiveJudging; // --verify-osr: judge stable replays every ms, as they were played live
+    bool Stepped => FrameStepped || StableReplay && !LiveJudging; // watching a stable replay steps like stable's viewer
     double lastStep;
     static readonly bool VerifyLog = Environment.GetEnvironmentVariable("VERIFY_LOG") == "1"; // per-judgement log for --verify-osr
     double virtualElapsed;
@@ -649,9 +651,9 @@ sealed partial class Player : Screen
             {
                 // Test-only: stable's replay watcher runs game logic only when it takes the next replay frame (at
                 // that frame's time), so --fuzz-osr can compare against it exactly. After the last frame it updates normally.
-                if (FrameStepped && playback != null && pbIndex < playback.Length && playback[pbIndex].Time > t) { simTime = t; continue; }
+                if (Stepped && playback != null && pbIndex < playback.Length && playback[pbIndex].Time > t) { simTime = t; continue; }
                 time = t;
-                Step(FrameStepped ? t - lastStep : 1);
+                Step(Stepped ? t - lastStep : 1);
                 lastStep = t;
                 while (sameTimePending && !finished) { sameTimePending = false; Step(0); }
                 simTime = t;

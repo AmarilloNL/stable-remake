@@ -151,7 +151,7 @@ The executable doubles as a test harness:
 | Command | What it does |
 |---|---|
 | `--check` | Parses every map in the library and validates the results |
-| `--verify-osr N` | Re-judges up to N of your stable replays headlessly and compares them with what stable recorded (`VERIFY_LOG=1` for a per-judgement log, `VERIFY_MD5=<hash>` for one map) |
+| `--verify-osr N` | Re-judges up to N of your stable replays headlessly and compares them with what stable recorded (`VERIFY_LOG=1` for a per-judgement log, `VERIFY_MD5=<hash>` for one map, `VERIFY_STEP=1` to judge them frame by frame like stable's replay viewer instead of as played live) |
 | `--auto-check [filter] [--mods HR]` | Plays maps with Auto at several frame times, lists any run that isn't all 300s, and prints each score |
 | `--play <file.osu> [--auto] [--mods HDDT]` | Starts a map directly |
 | `--watch <replay>` | Watches a replay |

@@ -385,15 +385,15 @@ sealed partial class Player
                 float k = 0.62f * sd;
                 DrawTexturePro(bg.Tex, new Rectangle(0, 0, bg.Tex.Width, bg.Tex.Height),
                     new Rectangle(-470 * k, anchor - 20 * k, bg.Width * k, bg.Height * k), Vector2.Zero, 0,
-                    A(info != null ? new Color(31, 115, 153, 150) : playback != null ? new Color(0, 0, 0, 150) : new Color(250, 250, 250, auto ? 40 : 100))); // stable: stored scores blue, the live player light (Auto: measured 40), dark when watching a replay
+                    A(info != null ? new Color(31, 115, 153, 150) : new Color(250, 250, 250, auto || playback != null ? 40 : 100))); // stable: stored scores blue, the live player light (Auto and replays: measured 40)
             }
             if (r > 0) // every panel shows its rank (stable hides it only on its online personal-best extra panel)
                 EntryText(r.ToString(), 82 * u, anchor - 2 * u, 2.2f, false, 3, 1, A(new Color(255, 255, 255, 47))); // measured; a nominal 80 comes out brighter
             Game.TextLight(PanelName(info?.Player is { Length: > 0 } pl ? pl : info == null ? me : "stable", u), 2 * u, y + 2.5f * u, 14.4f * u, A(Color.White)); // Aller Light, measured against stable
-            // The live panel counts along: current score and current combo.
+            // The live panel counts along: current score and max combo (stable's shows the max, measured watching a replay).
             long panelScore = info?.Score ?? score; // stable shows nothing for a zero score or combo (measured)
             if (panelScore > 0) EntryText(entryNumber.Of(panelScore), 2 * u, anchor + 18 * u, 1, true, 2.5f, 0, A(Color.White));
-            int panelCombo = info?.MaxCombo ?? combo;
+            int panelCombo = info?.MaxCombo ?? maxCombo;
             if (panelCombo > 0) EntryText(entryCombo.Of(panelCombo), 82 * u, anchor + 18 * u, 1, true, 2.5f, 1, A(new Color(153, 251, 255, 255)));
         }
 
