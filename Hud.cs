@@ -441,18 +441,19 @@ sealed partial class Player
                 new Rectangle(left + gx * px, y, s.Width * px, s.Height * px), Vector2.Zero, 0, tint);
     }
 
-    // Active mods as the skin's icons, right to left under the accuracy: scale 1, the first centred 30.2 units in from the
-    // right at y 94 (measured on a stable Auto play). TODO: the spacing between several icons is unchecked.
+    // Active mods as the skin's icons, right to left in flag order under the accuracy (NF rightmost, then HD...): scale 1,
+    // 49.5 units apart, the first centred 30.2 units in from the
+    // right at y 94 (measured on stable Auto and replay plays).
     void DrawMods(int w, float u, float sd)
     {
-        modIcons ??= [.. SongSelect.ModIcons.OrderByDescending(m => m.Flag)
+        modIcons ??= [.. SongSelect.ModIcons.OrderBy(m => m.Flag)
             .Where(m => mods.HasFlag(m.Flag) && !(m.Flag == Mods.DoubleTime && mods.HasFlag(Mods.Nightcore)) && !(m.Flag == Mods.SuddenDeath && mods.HasFlag(Mods.Perfect)))
             .Select(m => skin.Tex("selection-mod-" + m.Icon)).OfType<Sprite>()];
         float x = w - 30.2f * u;
         foreach (var sp in modIcons)
         {
             sp.Draw(new Vector2(x, 94 * u), sd, Color.White);
-            x -= 26 * u;
+            x -= 49.5f * u;
         }
     }
     Sprite[]? modIcons; // the mods never change mid-play

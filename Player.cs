@@ -23,7 +23,7 @@ sealed class ObjState
     public double SimTime = double.NaN, NextTick, LastInputTime = double.NaN;
     public bool HasAngle;
     public int SpinsCounted, ZeroCount;
-    public double Rpm, ClearAt = double.NaN, BonusAt = double.NaN;
+    public double Rpm, ClearAt = double.NaN, BonusAt = double.NaN, SpinTextFadeAt = double.NaN;
     public int Bonus;
 }
 
@@ -845,7 +845,8 @@ sealed partial class Player : Screen
             var b2 = playback[pbIndex];
             if (b2.Time > a.Time)
             {
-                pbCursor = Vector2.Lerp(new Vector2(a.X, a.Y), new Vector2(b2.X, b2.Y), (float)((now - a.Time) / (b2.Time - a.Time)));
+                // clamped: past the next frame (not stepped there yet) it would overshoot along the path, and the trail draws that
+                pbCursor = Vector2.Lerp(new Vector2(a.X, a.Y), new Vector2(b2.X, b2.Y), (float)Math.Clamp((now - a.Time) / (b2.Time - a.Time), 0, 1));
                 cursor = pbCursor;
             }
         }
@@ -1072,6 +1073,7 @@ sealed partial class Player : Screen
             storyboard?.Fire(time, "HitObjectHit");
             if (o.Type != ObjType.Slider) { combo++; maxCombo = Math.Max(maxCombo, combo); } // slider combo comes from its checkpoints
             V2Hit(result);
+            if (o.Type != ObjType.Spinner && Config.GetBool("HitLighting", true)) lightings.Add((popupPos, ColourOf(o), time));
             health.Apply(result switch { 300 => HpEvent.Hit300, 100 => HpEvent.Hit100, _ => HpEvent.Hit50 });
             if (result != 300 && mods.HasFlag(Mods.Perfect)) Fail();
         }
@@ -1278,6 +1280,7 @@ sealed partial class Player : Screen
         s.Rpm = s.Rpm * kr + (1 - kr) * Math.Abs(s.Velocity) * 1000 / (2 * Math.PI) * 60;
         if ((int)s.Rotation <= s.SpinsCounted) return;
         s.SpinsCounted++;
+        if (s.SpinsCounted == 4) s.SpinTextFadeAt = s.SimTime; // stable fades "SPIN!" out over 300ms once spun this far
         int req = SpinsRequired(o);
         if (s.SpinsCounted == req) s.ClearAt = s.SimTime;
         if (s.SpinsCounted > req + 3 && (s.SpinsCounted - (req + 3)) % 2 == 0)
@@ -1404,6 +1407,7 @@ sealed partial class Player : Screen
         if (showStoryboard) storyboard!.Draw(time, w, h, sbDim, overlay: false);
         UpdateComboBursts();
         DrawComboBursts(w, h);
+        DrawLightings();
         DrawFollowPoints();
 
         // Earlier objects on top: draw later ones first.
@@ -1747,6 +1751,7 @@ sealed partial class Player : Screen
     {
         if (!done) return (FadeInAlpha(o), 1);
         double t = time - judgeTime;
+        if (hit && mods.HasFlag(Mods.Hidden)) return (FadeInAlpha(o), 1); // HD: no burst, the Hidden fade just carries on (read from stable)
         if (hit) return ((float)Math.Max(0, 1 - t / 240), 1 + 0.4f * (float)Easing.Apply(1, t / 240)); // stable: fade linear, grow Out
         return ((float)Math.Max(0, 1 - t / 100) * FadeInAlpha(o), 1);
     }
@@ -1793,11 +1798,11 @@ sealed partial class Player : Screen
         {
             var cp = o.Checkpoints[c];
             if (cp.Span != span || cp.Kind != CheckpointKind.Tick) continue;
-            // stable: a tick pops in (fade + 0.5 -> 1.2, then -> 1 Out) halfway through its approach on the first
-            // span (150ms steps), halfway from its span's start on repeats (200ms in, settling over 200ms); HD fades
+            // stable: a tick pops in (fade + 0.5 -> 1.2, then -> 1 Out) on the first span halfway between the slider's start and
+            // its own time, less 2/3 of the preempt (150ms steps), halfway from its span's start on repeats (200ms in, settling over 200ms); HD fades
             // it out over the second before it.
             double pop, popIn, settle;
-            if (span == 0) { pop = (cp.Time - o.Time) / 2 + o.Time - map.Preempt; popIn = 150; settle = 150; }
+            if (span == 0) { pop = (int)((cp.Time - o.Time) / 2) + o.Time - (int)(map.Preempt * 2 / 3); popIn = 150; settle = 150; } // stable: 2/3 of the preempt (when snaking completes)
             else
             {
                 double spanFrom = o.Time + span * o.SpanDuration;
@@ -1823,11 +1828,12 @@ sealed partial class Player : Screen
             // end circles at every end still to come (both, while a repeat remains): sliderendcircle (+ overlay), else
             // a plain hit circle like stable's default skin
             bool own = skin.Tex("sliderendcircle") != null;
+            float tailAlpha = mods.HasFlag(Mods.Hidden) ? FadeInAlpha(o) * playfieldAlpha : alpha; // HD: end circles fade like hit circles (stable)
             void Tail(Vector2 at)
             {
                 var tail = ToScreen(at + off);
-                (own ? skin.Tex("sliderendcircle") : skin.Tex("hitcircle"))?.Draw(tail, CircleScale, ColorAlpha(Shade(colour, lit), alpha));
-                (own ? skin.Tex("sliderendcircleoverlay") : skin.Tex("hitcircleoverlay"))?.Draw(tail, CircleScale, ColorAlpha(Shade(Color.White, lit), alpha));
+                (own ? skin.Tex("sliderendcircle") : skin.Tex("hitcircle"))?.Draw(tail, CircleScale, ColorAlpha(Shade(colour, lit), tailAlpha));
+                (own ? skin.Tex("sliderendcircleoverlay") : skin.Tex("hitcircleoverlay"))?.Draw(tail, CircleScale, ColorAlpha(Shade(Color.White, lit), tailAlpha));
             }
             Tail(spanEnd);
             if (remaining >= 1) Tail(spanStart);
@@ -2035,6 +2041,26 @@ sealed partial class Player : Screen
     }
 
     // Follow points: dots along the gap between consecutive objects of the same combo, appearing in sequence.
+    // stable's hit lighting (the Hit lighting option): every circle hit and slider end leaves the skin's lighting in the
+    // object's combo colour, added on at hit-circle scale, growing 0.8 -> 1.2 (Out) over 600ms, fading in over 200ms and
+    // out over 1000ms from 400ms (read from a running stable).
+    readonly List<(Vector2 Pos, Color Colour, double At)> lightings = [];
+
+    void DrawLightings()
+    {
+        lightings.RemoveAll(l => time - l.At >= 1400 || time < l.At);
+        if (lightings.Count == 0 || skin.Tex("lighting") is not { } tex) return;
+        BeginBlendMode(BlendMode.Additive);
+        foreach (var (pos, colour, at) in lightings)
+        {
+            double t = time - at;
+            float a = (float)Math.Min(t / 200, Math.Clamp(1 - (t - 400) / 1000, 0, 1)) * playfieldAlpha;
+            float sc = 0.8f + 0.4f * (float)Easing.Apply(1, t / 600);
+            tex.Draw(ToScreen(pos), CircleScale * sc, ColorAlpha(colour, a));
+        }
+        EndBlendMode();
+    }
+
     void DrawFollowPoints()
     {
         // stable: each point fades in over FadeIn from 800ms (x preempt/450 when that is under 450) before its time,
@@ -2139,6 +2165,7 @@ sealed partial class Player : Screen
             double outFrom = o.EndTime - Math.Min(400, o.EndTime - o.Time);
             if (time > outFrom) a *= (float)Math.Clamp(1 - (time - outFrom) / Math.Max(1, o.EndTime - outFrom), 0, 1);
             if (!double.IsNaN(clearAt)) a *= (float)Math.Clamp(1 - (time - clearAt) / 100, 0, 1);
+            if (!double.IsNaN(s.SpinTextFadeAt)) a *= (float)Math.Clamp(1 - (time - s.SpinTextFadeAt) / 300, 0, 1);
             if (a > 0) spin.Draw(U(0, Base + 335), sd, ColorAlpha(Color.White, a * playfieldAlpha));
         }
         if (!double.IsNaN(clearAt) && skin.Tex("spinner-clear") is { } clear)
